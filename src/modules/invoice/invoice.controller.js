@@ -7,11 +7,14 @@ import path from 'path';
 import { promises as fsPromises } from 'fs';
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import { Client } from 'whatsapp-web.js'; 
+import pkg from 'whatsapp-web.js';
+const { Client, LocalAuth } = pkg;
 import qrcodeTerminal from 'qrcode-terminal';
 
-// إعداد عميل WhatsApp
-const client = new Client();
+// إعداد عميل WhatsApp مع التخزين المحلي للجلسة
+const client = new Client({
+    authStrategy: new LocalAuth()
+});
 let clientReady = false;
 
 client.on('qr', (qr) => {
@@ -21,7 +24,7 @@ client.on('qr', (qr) => {
 
 client.on('ready', () => {
     console.log('Client is ready!');
-    clientReady = true;
+    clientReady = true; // تأكد من أن العميل جاهز
 });
 
 client.on('message', msg => {
