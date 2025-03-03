@@ -29,13 +29,14 @@ const userSchema = new mongoose.Schema({
 
     role: {
         type : String,
-        enum: ["user","admin"],
-        default: "user"
+        enum: ["user","admin","client"],
+        default: "client"
     },
 
     phone: {
         type: String,
         unique : [true, 'User phone number must be unique'],
+        required: true,
     },
     address: {
         type: String,
