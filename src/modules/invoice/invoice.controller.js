@@ -35,49 +35,84 @@ client.on('message', msg => {
 
 client.initialize();
 
-/// جميع APIs الخاصة بالفواتير
-const getInvoice = catchAsyncError(async (req, res, next) => {
-    let invoices = await invoiceModel.find().populate('user_id');
-    if (!invoices) {
-        return next(new AppError('Invoice not fetched', 400));
-    }
+//  all apis for invoices
+
+const getAllInvoices = catchAsyncError(async (req, res, next) => {
+    const { userId } = req.params;
+    let invoices = await invoiceModel.find({ user_id: userId}).populate('customer_id');
+
+   if (!invoices || invoices.length === 0) {
+    return next(new AppError('No invoices found for this user', 404));
+}
     res.status(200).json({ message: "Invoices fetched successfully", invoices });
 });
 
 const getInvoiceById = catchAsyncError(async (req, res, next) => {
     const { id } = req.params;
-    let invoice = await invoiceModel.findById(id).populate('user_id');
+    let invoice = await invoiceModel.findById(id).populate('customer_id');
     if (!invoice) {
         return next(new AppError('Invoice not fetched', 400));
     }
     res.status(200).json({ message: "Invoice fetched successfully", invoice });
-});
+}); 
 
 const createInvoice = catchAsyncError(async (req, res, next) => {
-    const { user_id, invoice_id, invoice_date, currency, status, products } = req.body;
-    if (!products || !invoice_id || !user_id || !Array.isArray(products)) {
+    const { user_id, invoice_id, items, tax, discount , notes , privacy } = req.body;
+    if (!items || !invoice_id || !user_id || !Array.isArray(items)) {
         return next(new AppError("Missing required fields", 400));
     }
 
     // حساب المبلغ الإجمالي
     let total_amount = 0;
 
-    for (const product of products) {
-        const { product_id, quantity, price } = product;
-        if (!product_id || !quantity || !price) {
+    for (const item of items) {
+        const { product_id, quantity, price, name } = item;
+        if (!product_id || !quantity || !price || !name) {
             return next(new AppError('Missing product details', 400));
         }
         total_amount += quantity * price;
     }
-    
+    if(tax) {
+        total_amount -= discount;
+    }
+    if(discount) {
+        total_amount -= discount;
+    }
+      // البحث عن الفاتورة السابقة الخاصة بالمستخدم
+      const existingInvoice = await invoiceModel.findOne({ user_id });
+
+      // إذا كانت هناك فاتورة سابقة، نضيف الفاتورة الجديدة إلى invoiceHistory
+      if (existingInvoice) {
+          existingInvoice.invoiceHistory.push({
+              invoice_id: existingInvoice.invoice_id,
+              total_amount: existingInvoice.total_amount,
+              invoice_date: existingInvoice.createdAt
+          });
+          await existingInvoice.save();
+      } else {
+          // إذا لم يكن هناك فاتورة سابقة، يمكن إنشاء فاتورة جديدة مع invoiceHistory فارغ
+          await invoiceModel.create({
+              user_id,
+              invoice_id,
+              total_amount,
+              items,
+              tax,
+              discount,
+              notes,
+              privacy,
+              invoiceHistory: [] // بدءًا من مصفوفة فارغة
+          });
+      }
+  
     const newInvoice = await invoiceModel.create({
         user_id,
         invoice_id,
         total_amount,
-        invoice_date,
-        currency,
-        status,
-        products
+        items,
+        discount,
+        tax,
+        notes,
+        privacy
     });
 
     if (!newInvoice) {
@@ -89,7 +124,8 @@ const createInvoice = catchAsyncError(async (req, res, next) => {
 
 const updateInvoice = catchAsyncError(async (req, res, next) => {
     const { id } = req.params;
-    let invoice = await invoiceModel.findByIdAndUpdate(id, req.body, { new: true });
+
+    let invoice = await invoiceModel.findByIdAndUpdate(id, req.body , { new: true });
     if (!invoice) {
         return next(new AppError('Invoice not updated', 400));
     }
@@ -110,12 +146,12 @@ const generateInvoicePDF = (invoiceData, filePath) => {
     const doc = new PDFDocument();
     doc.pipe(fs.createWriteStream(filePath));
 
-    // إعدادات الوثيقة
+    // Document settings
     doc.fontSize(20).text('Invoice Generator', { align: 'center' });
     doc.moveDown(1);
 
-    // معلومات الفاتورة
-    doc.fontSize(14).text(`Date: ${invoiceData.invoice_date}`);
+    // Invoice information
+    doc.fontSize(14).text(`Date: ${invoiceData.lastInvoiceDate}`);
     doc.text(`Invoice #: ${invoiceData.invoice_id}`);
     doc.moveDown(1);
 
@@ -124,28 +160,53 @@ const generateInvoicePDF = (invoiceData, filePath) => {
     doc.text(`Email: ${invoiceData.user_id.email}`);
     doc.moveDown(1);
 
-    // قائمة المنتجات
+    // Product list
     doc.text('Products:', { underline: true });
-    invoiceData.products.forEach((product) => {
-        doc.text(`${product.product_id.name} - ${product.quantity} x ${product.price} = ${product.quantity * product.price}`);
-    });
+    if (invoiceData.items && Array.isArray(invoiceData.items)) {
+        invoiceData.items.forEach((item) => {
+            doc.text(`${item.name} - ${item.quantity} x ${item.price} = ${item.quantity * item.price}`);
+        });
+    } else {
+        doc.text('No products found.');
+    }
 
-    // المبلغ الإجمالي
+    // Total amount
     doc.moveDown(1);
     doc.text(`Total: ${invoiceData.total_amount}`, { bold: true });
+
+    // Add tax and discount if present
+    if (invoiceData.tax) {
+        doc.text(`Tax: ${invoiceData.tax}%`, { italic: true });
+    }
+    if (invoiceData.discount) {
+        doc.text(`Discount: ${invoiceData.discount}`, { italic: true });
+    }
+
+    // Notes
+    if (invoiceData.notes) {
+        doc.moveDown(1);
+        doc.text(`Notes: ${invoiceData.notes}`);
+    }
+
+    // Privacy conditions
+    if (invoiceData.privacy) {
+        doc.moveDown(1);
+        doc.text(`Privacy Conditions: ${invoiceData.privacy}`);
+    }
+
     doc.end();
 };
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
-const generateInvoicepdf = catchAsyncError(async (req, res, next) => {
+const generateInvoicePdf = catchAsyncError(async (req, res, next) => {
     const { id } = req.params;
-    let invoice = await invoiceModel.findById(id).populate('user_id');
+    let invoice = await invoiceModel.findById(id).populate('user_id').populate('customer_id'); // Ensure user_id and customer_id are populated
     if (!invoice) {
         return next(new AppError('Invoice not fetched', 400));
     }
-    
+
     const dirPath = path.join(__dirname, 'invoices'); // Define the directory path
     const filePath = path.join(dirPath, `${invoice.invoice_id}.pdf`);
 
@@ -158,7 +219,7 @@ const generateInvoicepdf = catchAsyncError(async (req, res, next) => {
 
     generateInvoicePDF(invoice, filePath);
     
-    // إرسال PDF كاستجابة لتحميله
+    // Send PDF as a response for download
     res.download(filePath, `${invoice.invoice_id}.pdf`, (err) => {
         if (err) {
             return next(new AppError('Failed to download the invoice', 500));
@@ -169,7 +230,7 @@ const generateInvoicepdf = catchAsyncError(async (req, res, next) => {
 // وظيفة لإرسال الفاتورة عبر WhatsApp
 const sendInvoiceByWhatsApp = catchAsyncError(async (req, res, next) => {
     const { id, phone } = req.params; // استقبال id ورقم الهاتف
-    const invoice = await invoiceModel.findById(id).populate('user_id');
+    const invoice = await invoiceModel.findById(id).populate('customer_id');
 
     if (!invoice) {
         return next(new AppError('Invoice not found', 404));
@@ -179,8 +240,11 @@ const sendInvoiceByWhatsApp = catchAsyncError(async (req, res, next) => {
     Invoice #: ${invoice.invoice_id}
     Date: ${invoice.invoice_date}
     Total Amount: ${invoice.total_amount} ${invoice.currency}
-    Products: ${invoice.products.map(product => `${product.product_id.name} 
-               - ${product.quantity} x ${product.price} = ${product.quantity * product.price}`).join('\n')}
+        Tax: ${invoice.tax ? invoice.tax + '%' : 'N/A'}
+    Discount: ${invoice.discount ? invoice.discount : 'N/A'}
+    Products: ${invoice.items.map(item => `${item.name} - ${item.quantity} x ${item.price} = ${item.quantity * item.price}`).join('\n')}
+    Notes: ${invoice.notes || 'N/A'}
+    Privacy Conditions: ${invoice.privacy || 'N/A'}
     `;
 
     if (!clientReady) {
@@ -202,11 +266,11 @@ const sendInvoiceByWhatsApp = catchAsyncError(async (req, res, next) => {
 });
 
 export { 
-    getInvoice, 
+    getAllInvoices, 
     getInvoiceById, 
     createInvoice, 
     updateInvoice, 
     deleteInvoice, 
-    generateInvoicepdf, 
+    generateInvoicePdf, 
     sendInvoiceByWhatsApp 
 };
