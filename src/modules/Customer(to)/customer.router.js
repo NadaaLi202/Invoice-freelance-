@@ -22,7 +22,7 @@ customerRouter.get('/:userId', protectedRoutes, allowedTo("user"), getAllCustome
 customerRouter.get('/get/:id',protectedRoutes, allowedTo("user"), getCustomerById); // error
 
 // Update a customer
-customerRouter.put('/:id', protectedRoutes, allowedTo("user"), updateCustomer);
+customerRouter.put('/:id', protectedRoutes, allowedTo("user"),fileUpload('logo','customer') ,updateCustomer);
 
 // Delete a customer
 customerRouter.delete('/:id', protectedRoutes, allowedTo("user"), deleteCustomer);

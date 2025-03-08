@@ -43,6 +43,7 @@ const getCompanyById = catchAsyncError(async (req, res, next) => {
 // Update a company
 const updateCompany = catchAsyncError(async (req, res, next) => {
     const { id } = req.params;
+    req.body.logo = req.file.filename
     let company = await companyModel.findByIdAndUpdate(id, req.body, { new: true });
 
     if (!company) {

@@ -12,5 +12,5 @@ export const companyRouter = express.Router();
 companyRouter.post('/',fileUpload('logo','company'),addCompany)
 companyRouter.get('/',protectedRoutes,allowedTo("user"),getAllCompanies) 
 companyRouter.get('/:id',getCompanyById)
-companyRouter.put('/:id',updateCompany)
+companyRouter.put('/:id',fileUpload('logo','company'),updateCompany)
 companyRouter.delete('/:id',protectedRoutes,allowedTo("user"),deleteCompany)

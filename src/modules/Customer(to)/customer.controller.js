@@ -9,7 +9,7 @@ const addCustomer = catchAsyncError(async (req, res, next) => {
     if (foundCustomer) {
         return next(new AppError('Customer already exists', 409));
     }
-    
+
     req.body.logo = req.file.filename
     let customer = new customerModel(req.body);
     await customer.save();
@@ -49,6 +49,7 @@ const getCustomerById = catchAsyncError(async (req, res, next) => {
 // Update a customer
 const updateCustomer = catchAsyncError(async (req, res, next) => {
     const { id } = req.params;
+    req.body.logo = req.file.filename
     let customer = await customerModel.findByIdAndUpdate(id, req.body, { new: true });
 
     if (!customer) {

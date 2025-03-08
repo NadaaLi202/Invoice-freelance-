@@ -10,7 +10,7 @@ export const userRouter = express.Router();
 userRouter.post('/',fileUpload('image','user'),addUser)
 userRouter.get('/',protectedRoutes,allowedTo("admin"),getAllUsers) 
 userRouter.get('/:id',getUserById)
-userRouter.put('/:id',updateUser)
+userRouter.put('/:id',fileUpload('image','user'),updateUser)
 userRouter.delete('/:id',protectedRoutes,allowedTo("admin","user"),deleteUser)
 
 

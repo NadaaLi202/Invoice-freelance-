@@ -12,7 +12,7 @@ const addUser = catchAsyncError(async (req,res,next) => {
    if(foundUser){
     return next(new AppError('User already exist',409))
    }
-   
+
    req.body.image = req.file.filename
     let user = new userModel(req.body)
     await user.save()
@@ -44,6 +44,8 @@ const getUserById = catchAsyncError(async (req,res,next) => {
 const updateUser = catchAsyncError(async(req,res,next) => {
 
     const {id} = req.params
+    
+    req.body.image = req.file.filename
     let User = await userModel.findByIdAndUpdate(id,req.body,{new : true})
     if(!User){
         return next(new AppError('User not update',400))
