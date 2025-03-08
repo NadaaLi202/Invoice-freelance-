@@ -32,7 +32,10 @@ const userSchema = new mongoose.Schema({
         enum: ["user","admin","customer"],
         default: "user"
     },
-
+    image: {
+        type:  String,
+        trim: true
+    },
     phone: {
         type: String,
         unique : [true, 'User phone number must be unique'],
@@ -46,6 +49,7 @@ const userSchema = new mongoose.Schema({
 },{timestamps: true})
 
 
+
 userSchema.pre('save',function (next) {
     if(this.isModified('password')) {
 
@@ -53,6 +57,12 @@ userSchema.pre('save',function (next) {
     this.password = bcrypt.hashSync(this.password,10)
     }
     next();
+})
+
+userSchema.post('init',(doc) => {
+    console.log(doc)
+    doc.image = "http://localhost:3000/user/" + doc.image
+
 })
 
 

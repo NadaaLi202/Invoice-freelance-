@@ -12,6 +12,8 @@ const addUser = catchAsyncError(async (req,res,next) => {
    if(foundUser){
     return next(new AppError('User already exist',409))
    }
+   
+   req.body.image = req.file.filename
     let user = new userModel(req.body)
     await user.save()
     res.status(200).json({message : 'User added successfully',user})
